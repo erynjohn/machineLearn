@@ -22,73 +22,96 @@ router.get('/api/home', (req, res) => {
   const imgsPath = path.resolve(basePath, 'imgs');
   const userImg = path.resolve(basePath, 'userImg');
   // const nameMappings = ["eryn", "mary", "rick"];
-  const nameMappings = fs.readFileSync('names.js', 'utf8').replace(/(\r\n|\n|\r)/gm,"").split(',');
+  const nameMappings = fs.readFileSync('names.js', 'utf8').replace(/(\r\n|\n|\r)/gm, "").split(',');
 
   // setup camera for capture
-  var opts = {
-    delay: 0,
-    saveShot: true,
-    device: false
-  }
-  var Webcam = NodeWebcam.create(opts)
-  Webcam.capture(`${userImg}/eryn6.jpg`, function (err, data) {
-    if (err) throw err
-    console.log(data)
+  let captureUser = (() => {
+    var opts = {
+      delay: 0,
+      saveShot: true,
+      device: false
+    }
+    var Webcam = NodeWebcam.create(opts)
+    Webcam.capture(`${userImg}/eryn6.jpg`, function (err, data) {
+      if (err) throw err
+      console.log(data)
+    })
+
   })
+  captureUser();
 
   setTimeout(() => {
+    let checkImages = (() => {
       const imgFiles = fs.readdirSync(imgsPath);
       const user = fs.readdirSync(userImg);
       const classifier = new cv.CascadeClassifier(cv.HAAR_FRONTALFACE_ALT2);
-      const getFaceImage = (grayImg) => {
-        const faceRects = classifier.detectMultiScale(grayImg).objects;
-        if (!faceRects.length) {
-          throw new Error('failed to detect faces');
-        }
+      return {
+        imgFiles,
+        user,
+        classifier
+      }
+    })
+    let checkFile = checkImages();
+
+    const getFaceImage = (grayImg) => {
+      const faceRects = checkFile.classifier.detectMultiScale(grayImg).objects;
+      if (!faceRects.length) {
+        console.log("No face detected")
+        captureUser()
+        checkImages()
+      } else {
+
         return grayImg.getRegion(faceRects[0]);
-      };
-      // webcam image process
-      const userImages = user
-        .map(files => path.resolve(userImg, files))
-        .map(filePath => cv.imread(filePath))
-        .map(img => img.bgrToGray())
-        // detect and extract face
-        .map(getFaceImage)
-        .map(faceImg => faceImg.resize(80, 80));
+      }
+    };
+    // webcam image process
+    const userImages = checkFile.user
+      .map(files => path.resolve(userImg, files))
+      .map(filePath => cv.imread(filePath))
+      .map(img => img.bgrToGray())
+      // detect and extract face
+      .map(getFaceImage)
+      .map(faceImg => faceImg.resize(80, 80));
 
-      const images = imgFiles
-        .map(file => path.resolve(imgsPath, file))
-        .map(filePath => cv.imread(filePath))
-        .map(img => img.bgrToGray())
+    const images = checkFile.imgFiles
+      .map(file => path.resolve(imgsPath, file))
+      .map(filePath => cv.imread(filePath))
+      .map(img => img.bgrToGray())
 
-        // detect and extract face
-        .map(getFaceImage)
-        .map(faceImg => faceImg.resize(80, 80));
+      // detect and extract face
+      .map(getFaceImage)
+      .map(faceImg => faceImg.resize(80, 80));
 
-      const isImageFour = (_, i) => imgFiles[i].includes('4');
-      const isNotImageFour = (_, i) => !isImageFour(_, i);
-      // use images 1 - 3 for training
-      const trainImages = images.filter(isNotImageFour);
-      const testImages = userImages;
-      // make labels
-      const labels = imgFiles
-        .filter(isNotImageFour)
-        .map(file => nameMappings.findIndex(name => file.includes(name)));
+    const isImageFour = (_, i) => checkFile.imgFiles[i].includes('4');
+    const isNotImageFour = (_, i) => !isImageFour(_, i);
+    // use images 1 - 3 for training
+    const trainImages = images.filter(isNotImageFour);
+    const testImages = userImages;
+    // make labels
+    const labels = checkFile.imgFiles
+      .filter(isNotImageFour)
+      .map(file => nameMappings.findIndex(name => file.includes(name)));
 
-      const runPrediction = (recognizer) => {
-        testImages.forEach((img) => {
-          const result = recognizer.predict(img);
-          console.log('predicted: %s, confidence: %s', nameMappings[result.label], result.confidence);
-          cv.imshowWait('face', img);
-          cv.destroyAllWindows();
-        });
-      };
+    const runPrediction = (recognizer) => {
+      testImages.forEach((img) => {
+        const result = recognizer.predict(img);
+        console.log('predicted: %s, confidence: %s', nameMappings[result.label], result.confidence);
+        cv.imshowWait('face', img);
+        cv.destroyAllWindows();
+        if (result.confidence > 100) {
+          console.log("welcome " + nameMappings[result.label].toUpperCase())
+        } else {
+          captureUser();
+          checkImages();
+        }
+      });
+    };
 
-      const lbph = new cv.LBPHFaceRecognizer();
-      lbph.train(trainImages, labels);
+    const lbph = new cv.LBPHFaceRecognizer();
+    lbph.train(trainImages, labels);
 
-      console.log('lbph:');
-      runPrediction(lbph);
+    console.log('lbph:');
+    runPrediction(lbph);
 
   }, 3000)
 
