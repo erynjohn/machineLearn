@@ -24,7 +24,7 @@ router.get('/api/home', (req, res) => {
   const basePath = './data/face-recognition';
   const imgsPath = path.resolve(basePath, 'imgs');
  
-  const nameMappings = ['mary', 'user'];
+  const nameMappings = ["eryn", "mary", "rick"];
 
 const imgFiles = fs.readdirSync(imgsPath);
 
