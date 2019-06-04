@@ -1,1 +1,1 @@
-# smarter-mirror
+# face rec and hand rec
