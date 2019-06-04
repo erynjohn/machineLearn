@@ -21,7 +21,8 @@ router.get('/api/home', (req, res) => {
   const basePath = './data/face-recognition';
   const imgsPath = path.resolve(basePath, 'imgs');
   const userImg = path.resolve(basePath, 'userImg');
-  const nameMappings = ["eryn", "mary", "rick"];
+  // const nameMappings = ["eryn", "mary", "rick"];
+  const nameMappings = fs.readFileSync('names.js', 'utf8').replace(/(\r\n|\n|\r)/gm,"").split(',');
 
   // setup camera for capture
   var opts = {
@@ -35,9 +36,6 @@ router.get('/api/home', (req, res) => {
     console.log(data)
   })
 
-
-  // const nameMappings = fs.readFileSync('names.js', 'utf8').replace(/(\r\n|\n|\r)/gm,"").split(',');
-
   setTimeout(() => {
       const imgFiles = fs.readdirSync(imgsPath);
       const user = fs.readdirSync(userImg);
@@ -49,7 +47,6 @@ router.get('/api/home', (req, res) => {
         }
         return grayImg.getRegion(faceRects[0]);
       };
-
       // webcam image process
       const userImages = user
         .map(files => path.resolve(userImg, files))
