@@ -9,7 +9,6 @@ const tf = require('@tensorflow/tfjs-node');
 const fs = require('fs');
 const cv = require('opencv4nodejs');
 var NodeWebcam = require("node-webcam");
-
 const router = express.Router();
 const secret = process.env.SECRET;
 
@@ -18,112 +17,85 @@ router.get('/', function (req, res) {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+
+
 router.get('/api/home', (req, res) => {
 
   const basePath = './data/face-recognition';
   const imgsPath = path.resolve(basePath, 'imgs');
-  const userImg = path.resolve(basePath, 'userImg')
-  // const nameMappings = ['eryn', 'mary', 'rick'];
-  
-  var opts = {
-    
-    delay: 0,
-    saveShot: true,
-    device: false
-    
+ 
+  const nameMappings = ['mary', 'user'];
+
+const imgFiles = fs.readdirSync(imgsPath);
+
+const classifier = new cv.CascadeClassifier(cv.HAAR_FRONTALFACE_ALT2);
+const getFaceImage = (grayImg) => {
+  const faceRects = classifier.detectMultiScale(grayImg).objects;
+  if (!faceRects.length) {
+    throw new Error('failed to detect faces');
   }
-  
-  var Webcam = NodeWebcam.create(opts)
-  Webcam.capture(`${userImg}/eryn.jpg`, function (err, data) {
-    if (err) throw err
-    console.log(data)
-  })
-  
-  const nameMappings = fs.readFileSync('names.js', 'utf8').replace(/(\r\n|\n|\r)/gm,"").split(',');
-  
-  console.log(nameMappings)
-    const imgFiles = fs.readdirSync(imgsPath);
-    const classifier = new cv.CascadeClassifier(cv.HAAR_FRONTALFACE_ALT2);
-    const getFaceImage = (grayImg) => {
-      const faceRects = classifier.detectMultiScale(grayImg).objects;
-      if (!faceRects.length) {
-        throw new Error('No faces detected');
-      }
-      return grayImg.getRegion(faceRects[0]);
+  return grayImg.getRegion(faceRects[0]);
+};
 
-    };
+const images = imgFiles
+  // get absolute file path
+  .map(file => path.resolve(imgsPath, file))
+  // read image
+  .map(filePath => cv.imread(filePath))
+  // face recognizer works with gray scale images
+  .map(img => img.bgrToGray())
+  // detect and extract face
+  .map(getFaceImage)
+  // face images must be equally sized
+  .map(faceImg => faceImg.resize(80, 80));
 
-    const images = imgFiles
-      // get absolute file path
-      .map(file => path.resolve(imgsPath, file))
-      // read image
-      .map(filePath => cv.imread(filePath))
-      // face recognizer works with gray scale images
-      .map(img => img.bgrToGray())
-      // detect and extract face
-      .map(getFaceImage)
-      // face images must be equally sized
-      .map(faceImg => faceImg.resize(80, 80));
+const isImageFour = (_, i) => imgFiles[i].includes('4');
+const isNotImageFour = (_, i) => !isImageFour(_, i);
+// use images 1 - 3 for training
+const trainImages = images.filter(isNotImageFour);
+// use images 4 for testing
+const testImages = images.filter(isImageFour);
+// make labels
+const labels = imgFiles
+  .filter(isNotImageFour)
+  .map(file => nameMappings.findIndex(name => file.includes(name)));
 
-      const isImageFour = (_, i) => imgFiles[i].includes('4');
-      const isNotImageFour = (_, i) => !isImageFour(_, i);
-      // use images 1 - 9 for training
-      const trainImages = images.filter(isNotImageFour);
-      // use images 10 for testing
-      const testImages = images.filter(isImageFour);
-      // make labels
-      const labels = imgFiles
-        .filter(isNotImageFour)
-        .map(file => nameMappings.findIndex(name => file.includes(name)));
-      const runPrediction = (recognizer) => {
-        console.log("checking prediction...")
-        // testImages.forEach((img) => {
-          testImages.forEach((img) => {
-          const result = recognizer.predict(img);
-          console.log('predicted: %s, confidence: %s', nameMappings[result.label], result.confidence);
-          cv.imshowWait('face', img);
-          cv.destroyAllWindows();
-          if (result.confidence >= 100) {
-            console.log('Match')
-          } else {
-            console.log('Match not exact')
-          }
-        });
-      };
-      // best for few images with change in light
-      const lbph = new cv.LBPHFaceRecognizer();
+const runPrediction = (recognizer) => {
+  testImages.forEach((img) => {
+    const result = recognizer.predict(img);
+    console.log('predicted: %s, confidence: %s', nameMappings[result.label], result.confidence);
+    cv.imshowWait('face', img);
+    cv.destroyAllWindows();
+  });
+};
+const lbph = new cv.LBPHFaceRecognizer();
+
+lbph.train(trainImages, labels);
+
+console.log('lbph:');
+runPrediction(lbph);
   
-      lbph.train(trainImages, labels);
+  // var opts = {
+    
+  //   delay: 0,
+  //   saveShot: true,
+  //   device: false
+    
+  // }
   
-      console.log('lbph:');
-      runPrediction(lbph);
+  // var Webcam = NodeWebcam.create(opts)
+  // Webcam.capture(`${userImg}/eryn.jpg`, function (err, data) {
+  //   if (err) throw err
+  //   console.log(data)
+  // })
+  
+  // const nameMappings = fs.readFileSync('names.js', 'utf8').replace(/(\r\n|\n|\r)/gm,"").split(',');
+  
 
 
   res.status(204)
 });
 
-router.get('/api/secret', withAuth, (req, res) => {
-  res.send('The password is potato');
-  //test webcam
-  const basePath = './data/face-recognition';
-  const imgsPath = path.resolve(basePath, 'imgs');
-
-  var opts = {
-
-    delay: 1,
-    saveShot: true,
-    device: false
-
-  }
-  var Webcam = NodeWebcam.create(opts);
-  Webcam.capture(`${imgsPath}/eryn4.jpeg`, function (err, data) {
-    if (err) throw err
-    console.log(data)
-  })
-
-
-
-});
 
 router.post('/api/register', (req, res) => {
   const { email, password } = req.body;
