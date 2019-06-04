@@ -1,0 +1,189 @@
+
+const express = require('express');
+
+const path = require('path');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+const withAuth = require('../middleware');
+const tf = require('@tensorflow/tfjs-node');
+const fs = require('fs');
+const cv = require('opencv4nodejs');
+var NodeWebcam = require("node-webcam");
+
+const router = express.Router();
+const secret = process.env.SECRET;
+
+
+router.get('/', function (req, res) {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+router.get('/api/home', (req, res) => {
+
+  const basePath = './data/face-recognition';
+  const imgsPath = path.resolve(basePath, 'imgs');
+  const userImg = path.resolve(basePath, 'userImg')
+  // const nameMappings = ['eryn', 'mary', 'rick'];
+  
+  var opts = {
+    
+    delay: 0,
+    saveShot: true,
+    device: false
+    
+  }
+  
+  var Webcam = NodeWebcam.create(opts)
+  Webcam.capture(`${userImg}/eryn.jpg`, function (err, data) {
+    if (err) throw err
+    console.log(data)
+  })
+  
+  const nameMappings = fs.readFileSync('names.js', 'utf8').replace(/(\r\n|\n|\r)/gm,"").split(',');
+  
+  console.log(nameMappings)
+    const imgFiles = fs.readdirSync(imgsPath);
+    const classifier = new cv.CascadeClassifier(cv.HAAR_FRONTALFACE_ALT2);
+    const getFaceImage = (grayImg) => {
+      const faceRects = classifier.detectMultiScale(grayImg).objects;
+      if (!faceRects.length) {
+        throw new Error('No faces detected');
+      }
+      return grayImg.getRegion(faceRects[0]);
+
+    };
+
+    const images = imgFiles
+      // get absolute file path
+      .map(file => path.resolve(imgsPath, file))
+      // read image
+      .map(filePath => cv.imread(filePath))
+      // face recognizer works with gray scale images
+      .map(img => img.bgrToGray())
+      // detect and extract face
+      .map(getFaceImage)
+      // face images must be equally sized
+      .map(faceImg => faceImg.resize(80, 80));
+
+      const isImageFour = (_, i) => imgFiles[i].includes('4');
+      const isNotImageFour = (_, i) => !isImageFour(_, i);
+      // use images 1 - 9 for training
+      const trainImages = images.filter(isNotImageFour);
+      // use images 10 for testing
+      const testImages = images.filter(isImageFour);
+      // make labels
+      const labels = imgFiles
+        .filter(isNotImageFour)
+        .map(file => nameMappings.findIndex(name => file.includes(name)));
+      const runPrediction = (recognizer) => {
+        console.log("checking prediction...")
+        // testImages.forEach((img) => {
+          testImages.forEach((img) => {
+          const result = recognizer.predict(img);
+          console.log('predicted: %s, confidence: %s', nameMappings[result.label], result.confidence);
+          cv.imshowWait('face', img);
+          cv.destroyAllWindows();
+          if (result.confidence >= 100) {
+            console.log('Match')
+          } else {
+            console.log('Match not exact')
+          }
+        });
+      };
+      // best for few images with change in light
+      const lbph = new cv.LBPHFaceRecognizer();
+  
+      lbph.train(trainImages, labels);
+  
+      console.log('lbph:');
+      runPrediction(lbph);
+
+
+  res.status(204)
+});
+
+router.get('/api/secret', withAuth, (req, res) => {
+  res.send('The password is potato');
+  //test webcam
+  const basePath = './data/face-recognition';
+  const imgsPath = path.resolve(basePath, 'imgs');
+
+  var opts = {
+
+    delay: 1,
+    saveShot: true,
+    device: false
+
+  }
+  var Webcam = NodeWebcam.create(opts);
+  Webcam.capture(`${imgsPath}/eryn4.jpeg`, function (err, data) {
+    if (err) throw err
+    console.log(data)
+  })
+
+
+
+});
+
+router.post('/api/register', (req, res) => {
+  const { email, password } = req.body;
+  const user = new User({ email, password });
+  user.save(function (err) {
+    if (err) {
+      console.log(err);
+      res.status(500).send("Error registering new user please try again.");
+    } else {
+      res.status(200).send("Welcome to the club!");
+    }
+  });
+});
+router.post('/api/logout', (req, res) => {
+  res.clearCookie('token')
+    .sendStatus(200);
+})
+
+
+router.post('/api/authenticate', (req, res) => {
+  const { email, password } = req.body;
+  User.findOne({ email }, function (err, user) {
+    if (err) {
+      console.error(err);
+      res.status(500)
+        .json({
+          error: 'Internal error please try again'
+        });
+    } else if (!user) {
+      res.status(401)
+        .json({
+          error: 'Incorrect email or password'
+        });
+    } else {
+      user.isCorrectPassword(password, function (err, same) {
+        if (err) {
+          res.status(500)
+            .json({
+              error: 'Internal error please try again'
+            });
+        } else if (!same) {
+          res.status(401)
+            .json({
+              error: 'Incorrect email or password'
+            });
+        } else {
+          // Issue token
+          const payload = { email };
+          const token = jwt.sign(payload, secret, {
+            expiresIn: '1h'
+          });
+          res.cookie('token', token, { httpOnly: true }).sendStatus(200);
+        }
+      });
+    }
+  });
+});
+
+router.get('/checkToken', withAuth, (req, res) => {
+  res.sendStatus(200);
+});
+
+module.exports = router;
