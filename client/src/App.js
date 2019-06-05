@@ -21,7 +21,7 @@ class App extends Component {
           <Route path="/" exact component={Home} />
           <Route path="/secret" component={withAuth(Secret)} />
           <Route path="/login" component={Login} />
-          <Route path='/mirror' component={Mirror} />
+          <Route path='/mirror' component={withAuth(Mirror)} />
         </Switch>
       </div>
     );
