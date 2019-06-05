@@ -33,8 +33,12 @@ export default class Home extends Component {
   
   componentDidMount() {
     fetch('/api/home')
-      .then(res => res.text())
-      .then(res => this.setState({message: res}));
+    .then(res => {
+      if(res.status === 200) {
+          this.props.history.push('/mirror')
+      }
+  })
+  .catch(err => { throw err })
   }
   
   render() {

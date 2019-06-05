@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "heroku-postbuild": "NPM_CONFIG_PRODUCTION=false npm install --prefix client && npm run build --prefix client",
+    "dev": "concurrently \"nodemon\" \"cd client/ && npm run start\""
   },
   "repository": {
     "type": "git",
@@ -27,6 +29,7 @@
     "bcrypt": "^3.0.6",
     "body-parser": "^1.19.0",
     "canvas": "^2.5.0",
+    "concurrently": "^4.1.0",
     "cookie-parser": "^1.4.4",
     "dotenv": "^8.0.0",
     "face-api.js": "^0.20.0",

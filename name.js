@@ -1,3 +1,0 @@
-eryn,
-mary,
-rick
