@@ -37,7 +37,7 @@
     "dotenv": "^8.0.0",
     "jsonwebtoken": "^8.5.1",
     "jwt-decode": "^2.2.0",
-    "mongoose": "^5.5.6",
+    "mongoose": "^5.7.5",
     "node-webcam": "^0.5.0",
     "opencv4nodejs": "^4.17.0"
   }
